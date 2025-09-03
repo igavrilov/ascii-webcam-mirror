@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Debug</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a1a; color: white; }
+        .debug-info { background: #2d2d2d; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .success { color: #51cf66; }
+        .error { color: #ff6b6b; }
+        .warning { color: #ffd43b; }
+        button { padding: 10px 20px; margin: 10px 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        video { max-width: 100%; border: 1px solid #333; margin: 10px 0; }
+        canvas { border: 1px solid #333; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Camera Debug Tool</h1>
+
+    <div class="debug-info">
+        <h3>Step-by-step Camera Test</h3>
+        <button onclick="testStep1()">Step 1: Check getUserMedia Support</button>
+        <button onclick="testStep2()">Step 2: Request Camera Access</button>
+        <button onclick="testStep3()">Step 3: Check Video Element</button>
+        <button onclick="testStep4()">Step 4: Test ASCII Conversion</button>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <div class="debug-info" id="log">
+        <h3>Debug Log:</h3>
+        <div id="logContent">Ready to test...</div>
+    </div>
+
+    <div class="debug-info">
+        <h3>Video Element Status:</h3>
+        <video id="video" autoplay playsInline muted></video>
+        <div id="videoInfo">No video loaded</div>
+    </div>
+
+    <div class="debug-info">
+        <h3>Canvas Test:</h3>
+        <canvas id="canvas" width="320" height="240"></canvas>
+        <div id="canvasInfo">No canvas data</div>
+    </div>
+
+    <script>
+        let stream = null;
+        let logContent = document.getElementById('logContent');
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = `[${timestamp}] ${message}`;
+            logContent.appendChild(div);
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function clearLog() {
+            logContent.innerHTML = 'Log cleared...';
+        }
+
+        async function testStep1() {
+            log('Testing getUserMedia support...');
+
+            if (!navigator.mediaDevices) {
+                log('❌ navigator.mediaDevices not available', 'error');
+                return;
+            }
+
+            if (!navigator.mediaDevices.getUserMedia) {
+                log('❌ getUserMedia not available', 'error');
+                return;
+            }
+
+            log('✅ getUserMedia is supported', 'success');
+
+            // Test if we can enumerate devices
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                log(`Found ${videoDevices.length} video devices`, 'success');
+                videoDevices.forEach((device, i) => {
+                    log(`  Device ${i + 1}: ${device.label || 'Unnamed'} (${device.deviceId})`);
+                });
+            } catch (e) {
+                log(`⚠️ Could not enumerate devices: ${e.message}`, 'warning');
+            }
+        }
+
+        async function testStep2() {
+            log('Requesting camera access...');
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'user',
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    },
+                    audio: false
+                });
+
+                log(`✅ Camera access granted! Stream has ${stream.getTracks().length} tracks`, 'success');
+
+                const videoTrack = stream.getVideoTracks()[0];
+                if (videoTrack) {
+                    const settings = videoTrack.getSettings();
+                    log(`Video track settings: ${settings.width}x${settings.height}@${settings.frameRate}fps`, 'success');
+                }
+
+                // Assign to video element
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+
+                // Test video loading
+                video.onloadedmetadata = () => {
+                    log(`Video metadata loaded: ${video.videoWidth}x${video.videoHeight}`, 'success');
+                    updateVideoInfo();
+                };
+
+                video.onloadeddata = () => {
+                    log('Video data loaded', 'success');
+                    updateVideoInfo();
+                };
+
+                video.onplaying = () => {
+                    log('Video is playing', 'success');
+                    updateVideoInfo();
+                };
+
+                video.onerror = (e) => {
+                    log(`Video error: ${e.message}`, 'error');
+                };
+
+            } catch (error) {
+                log(`❌ Camera access failed: ${error.name} - ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        function testStep3() {
+            const video = document.getElementById('video');
+            log('Checking video element status...');
+
+            log(`Video readyState: ${video.readyState} (${getReadyStateName(video.readyState)})`);
+            log(`Video dimensions: ${video.videoWidth}x${video.videoHeight}`);
+            log(`Video paused: ${video.paused}`);
+            log(`Video muted: ${video.muted}`);
+            log(`Video srcObject: ${video.srcObject ? 'Set' : 'Not set'}`);
+
+            if (video.readyState >= 2) {
+                log('✅ Video has current data, ready for processing', 'success');
+            } else {
+                log('⚠️ Video not ready yet', 'warning');
+            }
+
+            updateVideoInfo();
+        }
+
+        function testStep4() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+
+            log('Testing ASCII conversion...');
+
+            if (video.readyState < 2) {
+                log('❌ Video not ready for processing', 'error');
+                return;
+            }
+
+            try {
+                // Draw video frame to canvas
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // Get image data
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                log(`✅ Canvas drawn successfully, imageData size: ${imageData.data.length}`, 'success');
+
+                // Simple ASCII conversion test
+                const ascii = convertToAscii(imageData, 40, 20);
+                log(`✅ ASCII conversion successful, length: ${ascii.length}`, 'success');
+
+                document.getElementById('canvasInfo').innerHTML = `
+                    <pre style="background: black; color: green; padding: 10px; font-family: monospace; font-size: 12px; line-height: 1;">${ascii}</pre>
+                `;
+
+            } catch (error) {
+                log(`❌ ASCII conversion failed: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        function getReadyStateName(state) {
+            const names = ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'];
+            return names[state] || 'UNKNOWN';
+        }
+
+        function updateVideoInfo() {
+            const video = document.getElementById('video');
+            document.getElementById('videoInfo').innerHTML = `
+                Ready State: ${video.readyState} (${getReadyStateName(video.readyState)})<br>
+                Dimensions: ${video.videoWidth}x${video.videoHeight}<br>
+                Paused: ${video.paused}<br>
+                Muted: ${video.muted}<br>
+                Error: ${video.error ? video.error.message : 'None'}
+            `;
+        }
+
+        function convertToAscii(imageData, cols, rows) {
+            const { data, width, height } = imageData;
+            const cellWidth = width / cols;
+            const cellHeight = height / rows;
+            const chars = ' .:-=+*#%@';
+
+            let ascii = '';
+
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const x = Math.floor(col * cellWidth);
+                    const y = Math.floor(row * cellHeight);
+                    const index = (y * width + x) * 4;
+
+                    const r = data[index];
+                    const g = data[index + 1];
+                    const b = data[index + 2];
+                    const brightness = (r + g + b) / 3;
+
+                    const charIndex = Math.floor((brightness / 255) * (chars.length - 1));
+                    ascii += chars[charIndex];
+                }
+                ascii += '\n';
+            }
+
+            return ascii;
+        }
+
+        // Auto-start basic checks
+        window.onload = () => {
+            log('Debug page loaded, ready for testing');
+            testStep1();
+        };
+    </script>
+</body>
+</html>
