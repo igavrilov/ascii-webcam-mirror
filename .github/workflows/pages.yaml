@@ -14,6 +14,15 @@ concurrency:
   group: "pages"
   cancel-in-progress: true
 
+# Common env for GH Pages subpath deployments
+env:
+  NODE_VERSION: 20
+  PUBLIC_URL: "${{ format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}"
+  BASE_PATH: "${{ format('/{0}/', github.event.repository.name) }}"
+  NEXT_PUBLIC_BASE_PATH: "${{ format('/{0}/', github.event.repository.name) }}"
+  VITE_BASE: "${{ format('/{0}/', github.event.repository.name) }}"
+  GATSBY_PATH_PREFIX: "${{ format('/{0}/', github.event.repository.name) }}"
+
 jobs:
   build:
     name: Build
@@ -25,8 +34,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "${{ env.NODE_VERSION }}"
           cache: 'npm'
+
+      - name: Show Pages URL
+        run: |
+          echo "PUBLIC_URL=$PUBLIC_URL"
+          echo "BASE_PATH=$BASE_PATH"
 
       - name: Install dependencies (if Node project)
         run: |
@@ -39,6 +53,13 @@ jobs:
           fi
 
       - name: Build (if script exists)
+        env:
+          # Ensure envs are present to the build step
+          PUBLIC_URL: "${{ env.PUBLIC_URL }}"
+          BASE_PATH: "${{ env.BASE_PATH }}"
+          NEXT_PUBLIC_BASE_PATH: "${{ env.NEXT_PUBLIC_BASE_PATH }}"
+          VITE_BASE: "${{ env.VITE_BASE }}"
+          GATSBY_PATH_PREFIX: "${{ env.GATSBY_PATH_PREFIX }}"
         run: |
           if [ -f package.json ]; then \
             if [ -f pnpm-lock.yaml ]; then pnpm run -s build || true; \
